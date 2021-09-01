@@ -12,32 +12,45 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
     _directive = 'crossplatform-link'
 
     def parse_environment(self, environment_val) -> bool:
-            if environment_val is None:
-                return True
-            
-            if len(environment_val) > 0 and environment_val[0] == "!":
-                reverse_it = True
-                environment_val = environment_val[1:]
-            else:
-                reverse_it = False
+        if environment_val is None:
+            return True
+        
+        if len(environment_val) > 0 and environment_val[0] == "!":
+            reverse_it = True
+            environment_val = environment_val[1:]
+        else:
+            reverse_it = False
 
-            if len(environment_val) == 0:
-                raise ValueError(f"Malformed environment argument: {environment_val}")
+        if len(environment_val) == 0:
+            raise ValueError(f"Malformed environment argument: {environment_val}")
 
-            if "=" in environment_val:
-                environment_val, val = environment_val.split("=", 1)
+        if "=" in environment_val:
+            environment_val, val = environment_val.split("=", 1)
 
-                result = os.environ.get(environment_val) == val
-            else:
-                result = os.environ.get(environment_val) is not None
+            result = os.environ.get(environment_val) == val
+        else:
+            result = os.environ.get(environment_val) is not None
 
-            if reverse_it:
-                return not result
-            else:
-                return result
+        if reverse_it:
+            return not result
+        else:
+            return result
 
     def parse_platform(self, platform_val) -> bool:
-        return platform_val is None or platform_val.lower() == sys.platform.lower()
+        if platform_val is None:
+            return True
+
+        if len(platform_val) > 0 and platform_val[0] == "!":
+            reverse_it = True
+            platform_val = platform_val[1:]
+        else:
+            reverse_it = False
+        result = platform_val.lower() == sys.platform.lower()
+
+        if reverse_it:
+            return not result
+        else:
+            return result
 
     def _default_source(self, destination, source):
         if source is None:
@@ -68,7 +81,16 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             self._log.error(f"Cannot parse default environment value, ignoring it: {defaults.get('environment')}")
             did_error = True
         
-        for destination, source in data.items():
+        if isinstance(data, dict):
+            items = data.items()
+        elif isinstance(data, list):
+            items = []
+            for item in data:
+                for k, v in item.items():
+                    items.append((k, v))
+        else:
+            raise ValueError("CrossPlatform-Link only handles data of type dictionary or list of dictionaries")
+        for destination, source in items:
             # Fix destination, source
             destination = os.path.normpath(destination)
             self._fallback_to_copy[destination] = fallback_to_copy_default
