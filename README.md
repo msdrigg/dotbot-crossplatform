@@ -1,6 +1,6 @@
 # dotbot-crossplatform
 
-Crossplatform linking plugin for [Dotbot][https://github.com/anishathalye/dotbot].
+Crossplatform linking plugin for [Dotbot](https://github.com/anishathalye/dotbot).
 
 ## Motivation
 
@@ -8,7 +8,7 @@ Currently, dotbot doesn't work very well on windows. Symlinking is difficult to 
 file paths don't work as expected when syncing with windows and linux.
 
 I have created a crossplatform plugin that currently builds off the default `link` task. Hopefully in 
-the future if there is interest, I will add crossplatform versions of other tasks such as `shell`.
+the future I will add crossplatform versions of other default tasks such as `shell`.
 
 
 ## Scope
@@ -53,8 +53,8 @@ variables. A summary of all additional variables is presented below.
 | Parameter | Change |
 | --- | --- |
 |`fallback_to_copy` | Copy the files into the destination if sym-linking fails. Best paired with `force: true`. (default: false) |
-| `platform` | Only link if this variable matches python's `sys.platform`. Preceed with '!' to exclude platform instead |
-| `environment` | Only link if this environmental variable exists and matches. Preceed with '!' to exclude platform instead |
+| `platform` | Only link if this variable matches python's `sys.platform` case insensitively. Preceed with '!' to exclude this platform instead. Note: Please put value in quotes if you include '!' so that yaml will parse correctly. |
+| `environment` | Only link if this environmental variable exists and matches. Preceed with '!' to exclude variable matches instead. Note: Please put value in quotes if you include '!' so that yaml will parse correctly. |
 
 ## Complete Example as Dictionary
 
