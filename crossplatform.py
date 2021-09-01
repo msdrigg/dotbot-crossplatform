@@ -105,7 +105,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                 if platform and environment:
                     processed_data[destination] = source
                 else:
-                    self._log.lowinfo("Skipping %s -> %s" % (destination, source))
+                    self._log.lowinfo("Skipping %s -> %s" % (destination, self._default_source(destination, source.get('path'))))
             else:
                 processed_data[destination] = source
 
