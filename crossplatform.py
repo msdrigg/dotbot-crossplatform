@@ -143,7 +143,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             except OSError:
                 self._log.warning('Linking failed %s -> %s' % (link_name, source))
                 if fallback_to_copy:
-                    self._log.lowinfo('Falling back to directly copying file')
+                    self._log.lowinfo('Falling back to directly copying file for %s -> %s' % (link_name, source))
                     shutil.copyfile(source, destination)
                     success = True
             else:
@@ -151,8 +151,8 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                 success = True
         elif self._exists(link_name) and not self._is_link(link_name):
             self._log.warning(
-                '%s already exists but is a regular file or directory' %
-                link_name)
+                'Linking %s -> %s failed because %s already exists but is a regular file or directory' %
+                (link_name, source, link_name))
         elif self._is_link(link_name) and self._link_destination(link_name) != source:
             self._log.warning('Incorrect link %s -> %s' %
                 (link_name, self._link_destination(link_name)))
