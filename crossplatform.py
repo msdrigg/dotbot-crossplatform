@@ -1,18 +1,16 @@
 import os
 import sys
-import platform
-from typing import Any, Dict, List
 
 import dotbot
 
-class CrossPlatformLink(dotbot.plugins.Link):
+class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
     '''
     Symbolically links dotfiles.
     '''
 
-    _directive = 'link-crossplatform'
+    _directive = 'crossplatform-link'
 
-    def parse_environment(environment_val) -> bool:
+    def parse_environment(self, environment_val) -> bool:
             if environment_val is None:
                 return True
             
@@ -37,8 +35,8 @@ class CrossPlatformLink(dotbot.plugins.Link):
             else:
                 return result
 
-    def parse_platform(platform_val) -> bool:
-        return platform_val is None or platform_val.lower() == platform.release().lower()
+    def parse_platform(self, platform_val) -> bool:
+        return platform_val is None or platform_val.lower() == sys.platform.lower()
 
     def _default_source(self, destination, source):
         if source is None:
@@ -78,7 +76,9 @@ class CrossPlatformLink(dotbot.plugins.Link):
                     did_error = True
                 if platform and environment:
                     processed_data[destination] = source
+                else:
+                    self._log.lowinfo("Skipping %s" % destination)
             else:
                 processed_data[destination] = source
 
-        return self._process_links(data) and not did_error
+        return self._process_links(processed_data) and not did_error
