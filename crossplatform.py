@@ -51,7 +51,13 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             return not result
         else:
             return result
-
+    
+    def _normalize_path(self, path):
+        new_path = os.path.normpath(path)
+        if path[-1] == "/":
+            return f"{new_path}/"
+        return new_path
+    
     def _default_source(self, destination, source):
         if source is None:
             basename = os.path.basename(destination)
@@ -60,14 +66,14 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             else:
                 return basename
         else:
-            return os.path.normpath(source)
+            return self._normalize_path(source)
 
     def handle(self, directive, data) -> bool:
         if directive != self._directive:
             raise ValueError('CrossPlatform-Link cannot handle directive %s' % directive)
         did_error = False
         
-        processed_data = {}
+        processed_data = []
 
         defaults = self._context.defaults().get('link-crossplatform', {})
         fallback_to_copy_default = defaults.get("fallback_to_copy", False)
@@ -92,7 +98,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             raise ValueError("CrossPlatform-Link only handles data of type dictionary or list of dictionaries")
         for destination, source in items:
             # Fix destination, source
-            destination = os.path.normpath(destination)
+            destination = self._normalize_path(destination)
             self._fallback_to_copy[destination] = fallback_to_copy_default
             if isinstance(source, dict):
                 platform = self.parse_platform(source.get('platform')) and default_platform
@@ -103,13 +109,106 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                     self._log.error(f"Cannot parse default environment argument '{source.get('environment')}' for destination '{destination}', ignoring it")
                     did_error = True
                 if platform and environment:
-                    processed_data[destination] = source
+                    processed_data.append((destination, source))
                 else:
                     self._log.lowinfo("Skipping %s -> %s" % (destination, self._default_source(destination, source.get('path'))))
             else:
-                processed_data[destination] = source
+                processed_data.append((destination, source))
+
 
         return self._process_links(processed_data) and not did_error
+
+    def _process_links(self, link_tuples):
+        success = True
+        defaults = self._context.defaults().get('crossplatform-link', {})
+        for destination, source in link_tuples:
+            destination = os.path.expandvars(destination)
+            relative = defaults.get('relative', False)
+            # support old "canonicalize-path" key for compatibility
+            canonical_path = defaults.get('canonicalize', defaults.get('canonicalize-path', True))
+            force = defaults.get('force', False)
+            relink = defaults.get('relink', False)
+            create = defaults.get('create', False)
+            use_glob = defaults.get('glob', False)
+            base_prefix = defaults.get('prefix', '')
+            test = defaults.get('if', None)
+            ignore_missing = defaults.get('ignore-missing', False)
+            exclude_paths = defaults.get('exclude', [])
+            if isinstance(source, dict):
+                # extended config
+                test = source.get('if', test)
+                relative = source.get('relative', relative)
+                canonical_path = source.get('canonicalize', source.get('canonicalize-path', canonical_path))
+                force = source.get('force', force)
+                relink = source.get('relink', relink)
+                create = source.get('create', create)
+                use_glob = source.get('glob', use_glob)
+                base_prefix = source.get('prefix', base_prefix)
+                ignore_missing = source.get('ignore-missing', ignore_missing)
+                exclude_paths = source.get('exclude', exclude_paths)
+                path = self._default_source(destination, source.get('path'))
+            else:
+                path = self._default_source(destination, source)
+            if test is not None and not self._test_success(test):
+                self._log.lowinfo('Skipping %s' % destination)
+                continue
+            path = os.path.expandvars(os.path.expanduser(path))
+            if use_glob:
+                glob_results = self._create_glob_results(path, exclude_paths)
+                if len(glob_results) == 0:
+                    self._log.warning("Globbing couldn't find anything matching " + str(path))
+                    success = False
+                    continue
+                if len(glob_results) == 1 and (destination[-1] == '/' or (destination[-1] == '\\' and sys.platform == 'win32')):
+                    self._log.error("Ambiguous action requested.")
+                    self._log.error("No wildcard in glob, directory use undefined: " +
+                        destination + " -> " + str(glob_results))
+                    self._log.warning("Did you want to link the directory or into it?")
+                    success = False
+                    continue
+                elif len(glob_results) == 1 and destination[-1] != '/':
+                    # perform a normal link operation
+                    if create:
+                        success &= self._create(destination)
+                    if force or relink:
+                        success &= self._delete(path, destination, relative, canonical_path, force)
+                    success &= self._link(path, destination, relative, canonical_path, ignore_missing)
+                else:
+                    self._log.lowinfo("Globs from '" + path + "': " + str(glob_results))
+                    for glob_full_item in glob_results:
+                        # Find common dirname between pattern and the item:
+                        glob_dirname = os.path.dirname(os.path.commonprefix([path, glob_full_item]))
+                        glob_item = (glob_full_item if len(glob_dirname) == 0 else glob_full_item[len(glob_dirname) + 1:])
+                        # Add prefix to basepath, if provided
+                        if base_prefix:
+                            glob_item = base_prefix + glob_item
+                        # where is it going
+                        glob_link_destination = os.path.join(destination, glob_item)
+                        if create:
+                            success &= self._create(glob_link_destination)
+                        if force or relink:
+                            success &= self._delete(glob_full_item, glob_link_destination, relative, canonical_path, force)
+                        success &= self._link(glob_full_item, glob_link_destination, relative, canonical_path, ignore_missing)
+            else:
+                if create:
+                    success &= self._create(destination)
+                if not ignore_missing and not self._exists(os.path.join(self._context.base_directory(), path)):
+                    # we seemingly check this twice (here and in _link) because
+                    # if the file doesn't exist and force is True, we don't
+                    # want to remove the original (this is tested by
+                    # link-force-leaves-when-nonexistent.bash)
+                    success = False
+                    self._log.warning('Nonexistent source %s -> %s' %
+                        (destination, path))
+                    continue
+                if force or relink:
+                    success &= self._delete(path, destination, relative, canonical_path, force)
+                success &= self._link(path, destination, relative, canonical_path, ignore_missing)
+        if success:
+            self._log.info('All links have been set up')
+        else:
+            self._log.error('Some links were not successfully set up')
+        return success
 
     def _link(self, source, link_name, relative, canonical_path, ignore_missing):
         '''
@@ -126,6 +225,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
         destination = os.path.expanduser(link_name)
         base_directory = self._context.base_directory(canonical_path=canonical_path)
         absolute_source = os.path.join(base_directory, source)
+
         if relative:
             source = self._relative_path(absolute_source, destination)
         else:
