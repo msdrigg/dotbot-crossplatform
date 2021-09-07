@@ -54,8 +54,8 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
     
     def _normalize_path(self, path):
         new_path = os.path.normpath(path)
-        if path[-1] == "/":
-            return f"{new_path}/"
+        if path[-1] == "/" or path.endswith(os.sep):
+            return f"{new_path}{os.sep}"
         return new_path
     
     def _default_source(self, destination, source):
@@ -75,10 +75,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
         
         processed_data = []
 
-        defaults = self._context.defaults().get('link-crossplatform', {})
-        fallback_to_copy_default = defaults.get("fallback_to_copy", False)
-
-        self._fallback_to_copy = {}
+        defaults = self._context.defaults().get(self._directive, {})
 
         default_platform = self.parse_platform(defaults.get('platform'))
         try:
@@ -99,10 +96,8 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
         for destination, source in items:
             # Fix destination, source
             destination = self._normalize_path(destination)
-            self._fallback_to_copy[destination] = fallback_to_copy_default
             if isinstance(source, dict):
                 platform = self.parse_platform(source.get('platform')) and default_platform
-                self._fallback_to_copy[destination] = source.get("fallback_to_copy", fallback_to_copy_default)
                 try:
                     environment = self.parse_environment(source.get('environment')) and default_environment
                 except Exception as ex:
@@ -120,7 +115,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
 
     def _process_links(self, link_tuples):
         success = True
-        defaults = self._context.defaults().get('crossplatform-link', {})
+        defaults = self._context.defaults().get(self._directive, {})
         for destination, source in link_tuples:
             destination = os.path.expandvars(destination)
             relative = defaults.get('relative', False)
@@ -134,6 +129,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
             test = defaults.get('if', None)
             ignore_missing = defaults.get('ignore-missing', False)
             exclude_paths = defaults.get('exclude', [])
+            fallback_to_copy = defaults.get('fallback_to_copy', False)
             if isinstance(source, dict):
                 # extended config
                 test = source.get('if', test)
@@ -146,6 +142,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                 base_prefix = source.get('prefix', base_prefix)
                 ignore_missing = source.get('ignore-missing', ignore_missing)
                 exclude_paths = source.get('exclude', exclude_paths)
+                fallback_to_copy = source.get('fallback_to_copy', fallback_to_copy)
                 path = self._default_source(destination, source.get('path'))
             else:
                 path = self._default_source(destination, source)
@@ -159,20 +156,20 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                     self._log.warning("Globbing couldn't find anything matching " + str(path))
                     success = False
                     continue
-                if len(glob_results) == 1 and (destination[-1] == '/' or (destination[-1] == '\\' and sys.platform == 'win32')):
+                if len(glob_results) == 1 and (destination[-1] == '/' or destination.endswith(os.sep)):
                     self._log.error("Ambiguous action requested.")
                     self._log.error("No wildcard in glob, directory use undefined: " +
                         destination + " -> " + str(glob_results))
                     self._log.warning("Did you want to link the directory or into it?")
                     success = False
                     continue
-                elif len(glob_results) == 1 and destination[-1] != '/':
+                elif len(glob_results) == 1 and not (destination[-1] == '/' or destination.endswith(os.sep)):
                     # perform a normal link operation
                     if create:
                         success &= self._create(destination)
                     if force or relink:
                         success &= self._delete(path, destination, relative, canonical_path, force)
-                    success &= self._link(path, destination, relative, canonical_path, ignore_missing)
+                    success &= self._link(path, destination, relative, canonical_path, ignore_missing, fallback_to_copy)
                 else:
                     self._log.lowinfo("Globs from '" + path + "': " + str(glob_results))
                     for glob_full_item in glob_results:
@@ -188,7 +185,7 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                             success &= self._create(glob_link_destination)
                         if force or relink:
                             success &= self._delete(glob_full_item, glob_link_destination, relative, canonical_path, force)
-                        success &= self._link(glob_full_item, glob_link_destination, relative, canonical_path, ignore_missing)
+                        success &= self._link(glob_full_item, glob_link_destination, relative, canonical_path, ignore_missing, fallback_to_copy)
             else:
                 if create:
                     success &= self._create(destination)
@@ -203,24 +200,19 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                     continue
                 if force or relink:
                     success &= self._delete(path, destination, relative, canonical_path, force)
-                success &= self._link(path, destination, relative, canonical_path, ignore_missing)
+                success &= self._link(path, destination, relative, canonical_path, ignore_missing, fallback_to_copy)
         if success:
             self._log.info('All links have been set up')
         else:
             self._log.error('Some links were not successfully set up')
         return success
 
-    def _link(self, source, link_name, relative, canonical_path, ignore_missing):
+    def _link(self, source, link_name, relative, canonical_path, ignore_missing, fallback_to_copy=False):
         '''
         Links link_name to source.
         Returns true if successfully linked files.
         '''
         success = False
-        link_source = link_name
-        fallback_to_copy = self._fallback_to_copy.get(link_name)
-        while fallback_to_copy is not None and link_source != os.path.dirname(link_source):
-            link_source = os.path.dirname(link_source)
-            fallback_to_copy = self._fallback_to_copy.get(link_source)
 
         destination = os.path.expanduser(link_name)
         base_directory = self._context.base_directory(canonical_path=canonical_path)
@@ -244,8 +236,13 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin):
                 self._log.warning('Linking failed %s -> %s' % (link_name, source))
                 if fallback_to_copy:
                     self._log.lowinfo('Falling back to directly copying file for %s -> %s' % (link_name, source))
-                    shutil.copyfile(source, destination)
-                    success = True
+                    try:
+                        shutil.copyfile(source, destination)
+                        success = True
+                    except Exception as ex:
+                        self._log.warning(f"Copying failed with error {ex}")
+                else:
+                    self._log.lowinfo(f"Not falling back to copy for {link_name}")
             else:
                 self._log.lowinfo('Creating link %s -> %s' % (link_name, source))
                 success = True
