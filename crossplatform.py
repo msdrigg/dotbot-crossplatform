@@ -1,8 +1,9 @@
 import os
 import sys
 import shutil
-import subprocess
 import dotbot
+import subprocess
+import platform
 
 
 class CrossPlatformTask:
@@ -348,50 +349,12 @@ class CrossPlatformLink(dotbot.plugins.Link, dotbot.Plugin, CrossPlatformTask):
         return success
 
 
-def shell_command(
-    command,
-    cwd=None,
-    enable_stdin=False,
-    enable_stdout=False,
-    enable_stderr=False,
-    shell=None,
-):
-    with open(os.devnull, "w") as devnull_w, open(os.devnull, "r") as devnull_r:
-        stdin = None if enable_stdin else devnull_r
-        stdout = None if enable_stdout else devnull_w
-        stderr = None if enable_stderr else devnull_w
-        executable = shell or os.environ.get("SHELL")
-        if platform.system() == "Windows":
-            # We avoid setting the executable kwarg on Windows because it does
-            # not have the desired effect when combined with shell=True. It
-            # will result in the correct program being run (e.g. bash), but it
-            # will be invoked with a '/c' argument instead of a '-c' argument,
-            # which it won't understand.
-            #
-            # See https://github.com/anishathalye/dotbot/issues/219 and
-            # https://bugs.python.org/issue40467.
-            #
-            # This means that complex commands that require Bash's parsing
-            # won't work; a workaround for this is to write the command as
-            # `bash -c "..."`.
-            executable = None
-        return subprocess.call(
-            command,
-            shell=True,
-            executable=executable,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            cwd=cwd,
-        )
-
-
 class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
     """
     Run arbitrary shell commands.
     """
 
-    _directive = "shell"
+    _directive = "crossplatform-shell"
     _has_shown_override_message = False
 
     def can_handle(self, directive):
@@ -399,7 +362,9 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
 
     def handle(self, directive, data):
         if directive != self._directive:
-            raise ValueError("Shell cannot handle directive %s" % directive)
+            raise ValueError(
+                "CrossPlatformShell cannot handle directive %s" % directive
+            )
         return self._process_commands(data)
 
     def _process_commands(self, data):
@@ -441,7 +406,7 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
                 self._log.lowinfo("%s [%s]" % (msg, cmd))
             stdout = options.get("stdout", stdout)
             stderr = options.get("stderr", stderr)
-            ret = shell_command(
+            ret = self.shell_command(
                 cmd,
                 cwd=self._context.base_directory(),
                 enable_stdin=stdin,
@@ -470,3 +435,41 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
                 )
                 self._has_shown_override_message = True
         return ret
+
+    def shell_command(
+        self,
+        command,
+        cwd=None,
+        enable_stdin=False,
+        enable_stdout=False,
+        enable_stderr=False,
+        shell=None,
+    ):
+        with open(os.devnull, "w") as devnull_w, open(os.devnull, "r") as devnull_r:
+            stdin = None if enable_stdin else devnull_r
+            stdout = None if enable_stdout else devnull_w
+            stderr = None if enable_stderr else devnull_w
+            executable = shell or os.environ.get("SHELL")
+            if platform.system() == "Windows":
+                # We avoid setting the executable kwarg on Windows because it does
+                # not have the desired effect when combined with shell=True. It
+                # will result in the correct program being run (e.g. bash), but it
+                # will be invoked with a '/c' argument instead of a '-c' argument,
+                # which it won't understand.
+                #
+                # See https://github.com/anishathalye/dotbot/issues/219 and
+                # https://bugs.python.org/issue40467.
+                #
+                # This means that complex commands that require Bash's parsing
+                # won't work; a workaround for this is to write the command as
+                # `bash -c "..."`.
+                executable = None
+            return subprocess.call(
+                command,
+                shell=True,
+                executable=executable,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                cwd=cwd,
+            )
