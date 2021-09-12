@@ -7,13 +7,13 @@ Crossplatform linking plugin for [Dotbot](https://github.com/anishathalye/dotbot
 Currently, dotbot doesn't work very well on windows. Symlinking is difficult to get working, and
 file paths don't work as expected when syncing with windows and linux.
 
-I have created a crossplatform plugin that currently builds off the default `link` task. Hopefully in
-the future I will add crossplatform versions of other default tasks such as `shell`.
+I have created a crossplatform plugin that currently builds off the default `link` and `shell` tasks.
+In the future I will add crossplatform versions of other default tasks if I see a need.
 
 ## Scope
 
-This was started to meet my own requirements for dotbot on windows and linux. If you would like to see changes
-to meet your own workflow, please file an issue and I'll try to meet your needs.
+This was started to meet my own requirements for dotbot on windows and linux. If you would like to
+see changes to meet your own workflow, please file an issue and I'll try to meet your needs.
 
 ## Installation
 
@@ -31,6 +31,8 @@ the script to include `--plugin-dir dotbot-crossplatform`. For example:
 ```
 
 ## Usage
+
+### crossplatform-link
 
 Add a `crossplatform-link` task, or convert your existing `link` tasks to `crossplatform-link` tasks.
 The `crossplatform-link` task is built ontop of the `link` task, so much of the behavior is simliar.
@@ -55,7 +57,16 @@ variables. A summary of all additional variables is presented below.
 | `platform`         | Only link if this variable matches python's `sys.platform` case insensitively. Preceed with '!' to exclude this platform instead. Note: Please put value in quotes if you include '!' so that yaml will parse correctly. |
 | `environment`      | Only link if this environmental variable exists and matches. Preceed with '!' to exclude variable matches instead. Note: Please put value in quotes if you include '!' so that yaml will parse correctly.                |
 
-## Complete Example as Dictionary
+### crossplatform-shell
+
+Add a `crossplatform-shell` task, or convert your existing `shell` tasks to `crossplatform-shell` tasks.
+Just as with `crossplatform-link`, the format of the `crossplatform-shell` command closely matches the `shell` command.
+The only difference is the addition of the `platform` and the `environment` parameters (same as above), and the `shell`
+condition that can be used to pick a shell different from the default shell.
+
+## Examples
+
+### Complete Example as Dictionary
 
 ```yaml
 - crossplatform-link:
@@ -85,9 +96,18 @@ variables. A summary of all additional variables is presented below.
     ~/.profile2/:
       environment: "!WSL_DISTRO_NAME=Ubuntu" # Optional
       path: .profile2
+- crossplatform-shell:
+    - command: cd MonitorConfig && ./installer.sh
+      description: Installing monitor config
+      platform: linux
+      environment: DESKTOP_SESSION
+    - [
+        git submodule update --init --recursive,
+        Updating submodules to newest versions,
+      ]
 ```
 
-## Complete Example as List
+### Complete Example as List
 
 Note indentation. All secondary variables need an extra indent for the yaml to be
 parsed as a list of dictionaries
