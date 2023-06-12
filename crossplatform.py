@@ -370,6 +370,7 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
     def _process_commands(self, data):
         success = True
         defaults = self._context.defaults().get("shell", {})
+        defaults.update(self._context.defaults().get(self._directive, {}))
         options = self._get_option_overrides()
         for item in data:
             stdin = defaults.get("stdin", False)
@@ -464,6 +465,7 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
                 # won't work; a workaround for this is to write the command as
                 # `bash -c "..."`.
                 executable = None
+                os.environ["COMSPEC"] = 'powershell'
             return subprocess.call(
                 command,
                 shell=True,
