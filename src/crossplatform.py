@@ -1,9 +1,14 @@
 import os
-import sys
-import shutil
-import dotbot
-import subprocess
 import platform
+import shutil
+import subprocess
+import sys
+
+import dotbot
+
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+from lib import is_powershell, use_environ
 
 
 class CrossPlatformTask:
@@ -465,7 +470,17 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
                 # won't work; a workaround for this is to write the command as
                 # `bash -c "..."`.
                 executable = None
-                os.environ["COMSPEC"] = 'powershell'
+                if is_powershell(shell):
+                    with use_environ({"COMSPEC": 'powershell'}):
+                        return subprocess.call(
+                            command,
+                            shell=True,
+                            executable=executable,
+                            stdin=stdin,
+                            stdout=stdout,
+                            stderr=stderr,
+                            cwd=cwd,
+                        )
             return subprocess.call(
                 command,
                 shell=True,
