@@ -6,6 +6,8 @@ import sys
 
 import dotbot
 
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
 from lib import is_powershell, use_environ
 
 

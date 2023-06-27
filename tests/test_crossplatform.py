@@ -1,5 +1,5 @@
 import os
-from lib import use_environ
+from src.lib import use_environ
 
 def test_use_environ_set_nonexisting_environment():
     k = 'non-existing-env'
