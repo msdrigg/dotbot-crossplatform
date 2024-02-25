@@ -470,7 +470,7 @@ class CrossPlatformShell(dotbot.Plugin, CrossPlatformTask):
                 # won't work; a workaround for this is to write the command as
                 # `bash -c "..."`.
                 executable = None
-                if is_powershell(shell):
+                if shell is None or is_powershell(shell):
                     with use_environ({"COMSPEC": 'powershell'}):
                         return subprocess.call(
                             command,
